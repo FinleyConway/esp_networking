@@ -13,9 +13,7 @@ namespace ip = asio::ip;
 
 class tcp_server_t {
 public:
-    tcp_server_t() : m_acceptor(m_io_context) {
-        start_accept();
-    }
+    tcp_server_t() : m_acceptor(m_io_context) {}
 
     void start_listening(const ip::tcp& protocol, uint16_t port) {
         try {
