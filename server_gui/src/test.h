@@ -67,40 +67,42 @@ requires(T obj, typename T::net_t net) {
 && std::is_standard_layout_v<typename T::net_t>;
 
 template<packet_type... Ts>
-struct packet_registry_t {
+class packet_registry_t {
 private:
     using packet_id_t = uint16_t;
-    using callback_fn = void(*)(std::span<const uint8_t>);
+    using packet_bytes_view = std::span<uint8_t>;
+    using callback_fn = void(*)(packet_bytes_view);
 
 public:
-    template<typename T>
-    auto send(int socket, const T& data) {
+    template<typename T, typename Fn>
+    void send(const T& data, Fn&& fn) {
         static_assert(has_type<T>(), "T must be in Ts...");
 
         constexpr packet_id_t packet_id = get_type_id<T>();
+        constexpr size_t packet_id_size = sizeof(packet_id_t);
+        constexpr size_t packet_size = packet_id_size + sizeof(typename T::net_t);
+
         typename T::net_t net_data = T::to_net(data);
 
-        std::array<uint8_t, get_max_bytes()> buffer;
+        std::array<uint8_t, packet_size> buffer;
 
-        std::memcpy(buffer.data(), &packet_id, sizeof(packet_id_t)); // copy id to buffer
-        std::memcpy(buffer.data() + sizeof(packet_id_t), &net_data, sizeof(typename T::net_t)); // copy net data to buffer
+        std::memcpy(buffer.data(), &packet_id, packet_id_size); // copy id to buffer
+        std::memcpy(buffer.data() + packet_id_size, &net_data, sizeof(net_data)); // copy net data to buffer
 
-        // pretend to send bytes
-        for (auto i : buffer) {
-            std::cout << (int)i << std::endl;
-        }
-
-        return buffer;
+        std::forward<Fn>(fn)(std::span<const uint8_t>(buffer));
     }
 
-    void listen(int socket, std::span<const uint8_t> buffer) {
-        //std::array<uint8_t, get_max_bytes()> buffer;
+    template<typename Fn>
+    void listen(Fn&& fn) {
+        constexpr size_t packet_id_size = sizeof(packet_id_t);
+        constexpr size_t packet_size = packet_id_size + get_max_bytes();
+        std::array<uint8_t, packet_size> buffer;
 
-        // recv logic
+        std::forward<Fn>(fn)(buffer);
 
         packet_id_t packet_id = 0;
 
-        std::memcpy(&packet_id, buffer.data(), sizeof(packet_id_t));
+        std::memcpy(&packet_id, buffer.data(), packet_id_size);
 
         if (packet_id >= m_callback.size()) return; // prolly want to log this and/or return a status
 
@@ -108,9 +110,7 @@ public:
 
         // call the callback if one has been registered
         if (callback.invoker != nullptr) {
-            callback.invoker(std::span<const uint8_t>(
-                buffer.data() + sizeof(packet_id_t), callback.bytes
-            ));
+            callback.invoker(packet_bytes_view(buffer.data() + packet_id_size, callback.bytes));
         }
     }
 
@@ -121,7 +121,7 @@ public:
         auto& callback = m_callback[get_type_id<T>()];
         
         callback.bytes = sizeof(typename T::net_t);
-        callback.invoker = [](std::span<const uint8_t> bytes) {
+        callback.invoker = [](packet_bytes_view bytes) {
             typename T::net_t net_data{};
             std::memcpy(&net_data, bytes.data(), sizeof(net_data));
 
@@ -153,7 +153,7 @@ private:
     }
 
     static consteval size_t get_max_bytes() {
-        return std::max({sizeof(typename Ts::net_t)...}) + sizeof(packet_id_t);
+        return std::max({sizeof(typename Ts::net_t)...});
     }
 
     template<typename T>
@@ -176,15 +176,25 @@ void on_lights(const lights_t& lights) {
     std::cout << (int)lights.brightnes << std::endl;
 }
 
+void send_interface(std::span<const uint8_t> buffer) {
+
+}
+
+void recv_interface(std::span<uint8_t> buffer) {
+
+}
+
 int main() {
     packet_registry_t<engine_t, lights_t> reg;
     reg.register_callback<engine_t, &on_engine>();
     reg.register_callback<lights_t, &on_lights>();
 
-    auto buffer = reg.send<engine_t>(0, engine_t {
+    engine_t temp = {
         .next_speed = 1000,
         .direction = 0
-    });
+    };
 
-    reg.listen(0, std::span<const uint8_t>(buffer));
+    reg.send<engine_t>(temp, send_interface);
+
+    reg.listen(recv_interface);
 }
