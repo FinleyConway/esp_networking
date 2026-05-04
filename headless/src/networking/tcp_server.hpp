@@ -20,6 +20,10 @@ class tcp_server_t {
 public:
     tcp_server_t() : m_acceptor(m_io_context) {}
 
+    ~tcp_server_t() {
+        shutdown();
+    }
+
     void start() {
         m_io_thread = std::thread([this] {
             m_io_context.run();
@@ -96,6 +100,11 @@ public:
         return true;
     }
 
+    template<typename T, auto Fn>
+    void register_receive_callback() {
+        m_registry.register_callback<T, Fn>();
+    }
+
     void receive_from_client(bool enable) {
         std::lock_guard lock(m_connection_mutex);
 
@@ -103,7 +112,7 @@ public:
 
         // tell every client that the server doesn't/does want to receive 
         for (auto& [_, connection] : m_connections) {
-            connection->can_receive_from(enable);
+            connection->set_receiving(enable);
         }
     }
 
@@ -116,13 +125,20 @@ public:
             return false;
         }
 
-        it->second->close_connection();
+        it->second->close();
         m_connections.erase(it);
 
         return true;
     }
 
 private:
+    void handle_client_data(common::payload_t&& buffer, size_t bytes_received) {
+        m_registry.listen([&](common::payload_t& buffer) {
+            buffer = std::move(buffer);
+            return bytes_received;
+        });
+    }
+
     void wait_for_connection() {
         if (!m_accepting) return;
 
@@ -149,6 +165,11 @@ private:
 
         // setup new valid connection
         new_connection->set_connection_id(m_connection_count);
+        new_connection->set_receive_callback(
+            [this](common::payload_t&& buffer, size_t bytes) {
+                this->handle_client_data(std::move(buffer), bytes);
+            }
+        );
         m_connections.emplace(m_connection_count, new_connection);
 
         // move and check for other connections

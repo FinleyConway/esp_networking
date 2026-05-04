@@ -1,20 +1,20 @@
 #pragma once
 
-#include <array>
 #include <deque>
 #include <memory>
-#include <optional>
+#include <functional>
+#include <system_error>
 
 #include <asio.hpp>
 
 #include "tcp_common.hpp"
-
 #include "registry.hpp"
 
 namespace ip = asio::ip;
 
 class tcp_connection_t : public std::enable_shared_from_this<tcp_connection_t> {
 public:
+    using on_receive_t = std::function<void(common::payload_t&&, size_t)>;
     typedef std::shared_ptr<tcp_connection_t> pointer_t;
 
     static pointer_t create(asio::io_context& io_context) {
@@ -26,61 +26,55 @@ public:
     }
 
     void set_connection_id(esp_id_t id) {
-        m_connection_id = std::make_optional(id);
+        m_connection_id = id;
     }
 
-    void can_receive_from(bool flag) {
-        m_can_send = flag;
+    void set_receive_callback(on_receive_t&& callback) {
+        m_receive_callback = std::move(callback);
+    }
 
-        if (flag) {
-            //read_from();
+    void set_receiving(bool enable) {
+        m_receiving = enable;
+
+        if (enable) {
+            start_read();
         }
     }
 
     void send(common::payload_t&& buffer) {
-        if (!m_socket.is_open()) {
-            //LOG_WARN("Client {} is disconnecting, write prevented", m_connection_id);
-            return;
-        }
+        if (!m_socket.is_open()) return;
 
-        // queue buffer data
         m_write_queue.emplace_back(std::move(buffer));
 
-        // prevent over writing by doing 1 operation at a time
-        if (!m_is_writing) {
-            write_to();
+        if (!m_writing) {
+            start_write();
         }
     }
 
-    void close_connection() {
+    void close() {
         if (!m_socket.is_open()) return;
 
-        // make sure everything stops
-        m_is_reading = false;
-        m_is_writing = false;
+        m_receiving = false;
+        m_writing = false;
         m_write_queue.clear();  
 
-        if (std::error_code ec; m_socket.close(ec)) {
-            //LOG_ERROR("Client {}, socket failed to close: {}", m_connection_id, ec.message());
-        }
+        m_socket.close();
     }
 
 private:
     explicit tcp_connection_t(asio::io_context& io_context) : m_socket(io_context) {
     }
 
-    void write_to() {
-        // prevent multiple requests from happening
-        if (m_is_writing || m_write_queue.empty()) {
-            return;
-        }
+    void start_write() {
+        if (m_writing || m_write_queue.empty()) return;
 
-        m_is_writing = true;
-        auto& bytes = m_write_queue.front();
+        m_writing = true;
+
+        auto& buffer = m_write_queue.front();
 
         asio::async_write(
             m_socket, 
-            asio::buffer(bytes.data(), bytes.size()),
+            asio::buffer(buffer.data(), buffer.size()),
             std::bind(
                 &tcp_connection_t::handle_write, 
                 shared_from_this(),
@@ -89,23 +83,22 @@ private:
         );
     }
 
-    void handle_write(const std::error_code& error) {
-        m_is_writing = false;
+    void handle_write(const std::error_code& ec) {
+        m_writing = false;
 
-        if (error) {
-            handle_io_errors(error);
+        if (ec) {
+            handle_errors(ec);
             return;
         }
 
         m_write_queue.pop_front();
-        write_to();
+        start_write();
     }
 
-    void read_from() {    
-        // prevent clients from senting information to server
-        if (m_is_reading || !m_can_send) return;
+    void start_read() {    
+        if (m_reading || !m_receiving) return;
 
-        m_is_reading = true;
+        m_reading = true;
 
         asio::async_read(
             m_socket,
@@ -113,49 +106,54 @@ private:
             std::bind(
                 &tcp_connection_t::handle_read, 
                 shared_from_this(),
-                asio::placeholders::error
+                asio::placeholders::error,
+                asio::placeholders::bytes_transferred
             )
         );
     }
 
-    void handle_read(const std::error_code& error) {
-        m_is_reading = false;
+    void handle_read(const std::error_code& ec, size_t bytes_transferred) {
+        m_reading = false;
 
-        if (error) {
-            handle_io_errors(error);
+        if (ec) {
+            handle_errors(ec);
             return;
         }
 
-        // notify server
-        // ...
+        if (m_receive_callback != nullptr) {
+            m_receive_callback(std::move(m_read_data), bytes_transferred);
+        }
 
-        read_from();
+        start_read();
     }
 
-    void handle_io_errors(const std::error_code& error) {
+    void handle_errors(const std::error_code& ec) {
         if (!m_socket.is_open()) return;
 
-        if (error == asio::error::operation_aborted) return;
+        if (ec == asio::error::operation_aborted) return;
 
-        if (error == asio::error::eof || error == asio::error::connection_reset) {
-            //close_connection();
+        if (ec == asio::error::eof || ec == asio::error::connection_reset) {
+            close();
             return;
         }
 
         //LOG_WARN("Client {} I/O error: {}", m_connection_id, error.message());
 
-        //close_connection();
+        close();
     }
 
 private:
     ip::tcp::socket m_socket;
-    std::optional<esp_id_t> m_connection_id;
+    esp_id_t m_connection_id;
+
+    on_receive_t m_receive_callback;
+
     std::deque<common::payload_t> m_write_queue;
     common::payload_t m_read_data;
     
-    bool m_can_send = true;
-    bool m_is_writing = false;
-    bool m_is_reading = false;
+    bool m_receiving = true;
+    bool m_writing = false;
+    bool m_reading = false;
 };
 
 using tcp_connection_ptr_t = tcp_connection_t::pointer_t;
