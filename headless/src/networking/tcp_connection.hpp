@@ -38,7 +38,7 @@ public:
         }
     }
 
-    void send(payload_t&& buffer) {
+    void send(common::payload_t&& buffer) {
         if (!m_socket.is_open()) {
             //LOG_WARN("Client {} is disconnecting, write prevented", m_connection_id);
             return;
@@ -110,7 +110,7 @@ private:
 
         asio::async_read(
             m_socket,
-            asio::buffer(m_read_data),
+            asio::buffer(m_read_data.data(), m_read_data.size()),
             std::bind(
                 &tcp_connection_t::handle_read, 
                 shared_from_this(),
@@ -151,10 +151,10 @@ private:
 private:
     ip::tcp::socket m_socket;
     std::optional<esp_id_t> m_connection_id;
-    std::deque<payload_t> m_write_queue;
-    payload_t m_read_data;
+    std::deque<common::payload_t> m_write_queue;
+    common::payload_t m_read_data;
     
-    bool m_can_send = false;
+    bool m_can_send = true;
     bool m_is_writing = false;
     bool m_is_reading = false;
 };
