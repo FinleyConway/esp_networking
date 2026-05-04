@@ -62,12 +62,11 @@ public:
                 m_acceptor.open(m_endpoint.protocol());
                 m_acceptor.set_option(ip::tcp::acceptor::reuse_address(true));
                 m_acceptor.bind(ip::tcp::endpoint(m_endpoint));
+                m_acceptor.listen();
             }
             catch(const std::exception& e) {
                 std::cerr << e.what() << std::endl;
             }
-
-            m_acceptor.listen();
 
             // start listening
             wait_for_connection();
