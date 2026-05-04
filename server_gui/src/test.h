@@ -71,6 +71,7 @@ class packet_registry_t {
 private:
     using packet_id_t = uint16_t;
     using packet_bytes_view = std::span<uint8_t>;
+    using const_packet_bytes_view = std::span<const uint8_t>;
     using callback_fn = void(*)(packet_bytes_view);
 
 public:
@@ -89,13 +90,14 @@ public:
         std::memcpy(buffer.data(), &packet_id, packet_id_size); // copy id to buffer
         std::memcpy(buffer.data() + packet_id_size, &net_data, sizeof(net_data)); // copy net data to buffer
 
-        std::forward<Fn>(fn)(std::span<const uint8_t>(buffer));
+        std::forward<Fn>(fn)(const_packet_bytes_view(buffer));
     }
 
     template<typename Fn>
     void listen(Fn&& fn) {
         constexpr size_t packet_id_size = sizeof(packet_id_t);
-        constexpr size_t packet_size = packet_id_size + get_max_bytes();
+        constexpr size_t packet_size = get_max_bytes();
+        
         std::array<uint8_t, packet_size> buffer;
 
         std::forward<Fn>(fn)(buffer);
