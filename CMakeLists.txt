@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22...3.30)
-project(esp_headless LANGUAGES CXX)
+project(host LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,7 +9,7 @@ add_subdirectory(vendors/spdlog)
 add_subdirectory(common)
 
 add_executable(${PROJECT_NAME}
-    headless/src/main.cpp
+    host/src/main.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
