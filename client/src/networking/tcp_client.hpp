@@ -74,12 +74,13 @@ namespace client {
         tcp_status_t send_to_server(common::esp_id_t client_id, const T& data) {
             common::payload_t payload = m_registry.create_payload<T>(data);
             size_t total_bytes_send = 0;
+            size_t payload_size = m_registry.get_packet_bytes<T>();
 
-            while (total_bytes_send < payload.size()) {
+            while (total_bytes_send < payload_size) {
                 ssize_t bytes_sent = send(
                     m_socket,
                     payload.data() + total_bytes_send,
-                    payload.size() - total_bytes_send,
+                    payload_size - total_bytes_send,
                     0
                 );
 

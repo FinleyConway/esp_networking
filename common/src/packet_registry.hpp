@@ -49,6 +49,13 @@ namespace common {
 
             return m_callback.at(packed_id).bytes;
         }
+        
+        template<typename T>
+        size_t get_packet_bytes() const {
+            static_assert(has_type<T>(), "T must be in Ts...");
+
+            return m_callback.at(get_type_id<T>()).bytes;
+        }
 
         bool dispatch(packet_id_t packet_id, const payload_t& payload, size_t bytes_received) {
             // prevent invalid packet ids
@@ -104,11 +111,6 @@ namespace common {
                 static_assert(sizeof...(Rest) > 0, "type not found");
                 return type_index_impl<T, Rest...>(idx + 1);
             }
-        }
-
-        template<typename T>
-        static consteval size_t get_type_id() {
-            return type_index_impl<T, Ts...>();
         }
 
         static consteval size_t get_max_bytes() {

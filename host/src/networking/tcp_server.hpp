@@ -1,5 +1,3 @@
-#include <iostream> // remove later
-
 #include <mutex>
 #include <atomic>
 #include <thread>
@@ -16,9 +14,21 @@
 namespace ip = asio::ip;
 
 namespace host {
+    enum class tcp_status_t {
+        success,
+        already_accepting,
+        fail_to_accept,
+        unknown_client,
+        no_client_connection
+    };
+
     class tcp_server_t {
     public:
-        tcp_server_t() : m_acceptor(m_io_context) {}
+        tcp_server_t(const ip::tcp& protocol, uint16_t port) : 
+            m_acceptor(m_io_context),
+            m_endpoint(ip::tcp::endpoint(protocol, port))
+        {
+        }
 
         ~tcp_server_t() {
             shutdown();
@@ -30,6 +40,10 @@ namespace host {
             });
         }
 
+        bool is_running() const {
+            return m_io_thread.joinable();
+        }
+
         void shutdown() {
             toggle_accepting(false);
 
@@ -38,26 +52,12 @@ namespace host {
             if (m_io_thread.joinable()) {
                 m_io_thread.join();
             }
-
-            std::cout << "Shutting down\n";
         }
 
-        void configure(const ip::tcp& protocol, uint16_t port) {
-            m_endpoint = ip::tcp::endpoint(protocol, port);
-            m_configured = true;
-        }
-
-        void toggle_accepting(bool enable) {
-            if (!m_configured) {
-                std::cerr << "Server not configured\n";
-                return;
-            }
-
+        tcp_status_t toggle_accepting(bool enable) {
             if (enable) {
                 // prevent accepting when its already open
-                if (m_acceptor.is_open()) return;
-
-                m_accepting = true;
+                if (m_acceptor.is_open()) return tcp_status_t::already_accepting;
 
                 // try setup acceptor for esps to connect 
                 try {
@@ -67,35 +67,34 @@ namespace host {
                     m_acceptor.listen();
                 }
                 catch(const std::exception& e) {
-                    std::cerr << e.what() << std::endl;
+                    return tcp_status_t::fail_to_accept;
                 }
 
                 // start listening
                 wait_for_connection();
             }
             else {
-                m_accepting = false;
                 m_acceptor.close();
             }
         }
 
         template<typename T>
-        bool send_to_client(common::esp_id_t client_id, const T& data) {
+        tcp_status_t send_to_client(common::esp_id_t client_id, const T& data) {
             std::lock_guard lock(m_connection_mutex);
 
             auto it = m_connections.find(client_id);
             if (it == m_connections.end()) {
-                std::cerr << "send_to_client: client " << client_id << " not found\n";
-                return false;
+                return tcp_status_t::unknown_client;
             }
 
-            std::cout << "Sending to client " << client_id << '\n';
+            bool success = it->second->send(
+                m_registry.create_payload(data),
+                m_registry.get_packet_bytes<T>()
+            );
 
-            m_registry.create_payload<T>([connection = it->second](common::payload_t&& buffer) {
-                connection->send(std::move(buffer));
-            });
+            if (!success) return tcp_status_t::no_client_connection;
 
-            return true;
+            return tcp_status_t::success;
         }
 
         template<typename T, auto Fn>
@@ -106,39 +105,36 @@ namespace host {
         void receive_from_client(bool enable) {
             std::lock_guard lock(m_connection_mutex);
 
-            //LOG_INFO("Listening to clients has {}.", enable ? "started" : "stopped");
-
             // tell every client that the server doesn't/does want to receive 
             for (auto& [_, connection] : m_connections) {
                 connection->set_receiving(enable);
             }
         }
 
-        bool disconnect_client(common::esp_id_t client_id) {
+        tcp_status_t disconnect_client(common::esp_id_t client_id) {
             std::lock_guard lock(m_connection_mutex);
 
             auto it = m_connections.find(client_id);
             if (it == m_connections.end()) {
-                // LOG_ERROR("Client {} not found", client_id);
-                return false;
+                return tcp_status_t::unknown_client;
             }
 
-            it->second->close();
-            m_connections.erase(it);
+            if (it->second->close()) {
+                m_connections.erase(it);
 
-            return true;
+                return tcp_status_t::success;
+            }
+
+            return tcp_status_t::no_client_connection;
         }
 
     private:
-        void handle_client_data(common::payload_t&& buffer, size_t bytes_received) {
-            m_registry.listen([&](common::payload_t& buffer) {
-                buffer = std::move(buffer);
-                return bytes_received;
-            });
+        void handle_client_data(common::esp_id_t id, common::payload_t&& buffer, size_t bytes_received) {
+            m_registry.dispatch(id, std::move(buffer), bytes_received);
         }
 
         void wait_for_connection() {
-            if (!m_accepting) return;
+            if (!m_acceptor.is_open()) return;
 
             tcp_connection_ptr_t new_connection = tcp_connection_t::create(m_io_context);
 
@@ -154,20 +150,20 @@ namespace host {
         }
 
         void create_new_connection(tcp_connection_ptr_t new_connection, const std::error_code& error) {
-            if (!m_accepting) return;
+            if (!m_acceptor.is_open()) return;
 
             if (error) {
-                std::cout << "Accepting incoming client failed: " << error.message() << "\n";
+                //std::cout << "Accepting incoming client failed: " << error.message() << "\n";
                 return; 
             }
 
             // setup new valid connection
             new_connection->set_connection_id(m_connection_count);
-            new_connection->set_receive_callback(
-                [this](common::payload_t&& buffer, size_t bytes) {
-                    this->handle_client_data(std::move(buffer), bytes);
-                }
-            );
+            new_connection->set_receive_callback([&](common::esp_id_t id, common::payload_t&& buffer, size_t bytes) {
+                handle_client_data(id, std::move(buffer), bytes);
+            });
+            new_connection->set_registry(&m_registry);
+
             m_connections.emplace(m_connection_count, new_connection);
 
             // move and check for other connections
@@ -181,8 +177,6 @@ namespace host {
         std::thread m_io_thread;
 
         ip::tcp::endpoint m_endpoint;
-        bool m_configured = false;
-        std::atomic<bool> m_accepting = false;
 
         std::unordered_map<common::esp_id_t, tcp_connection_ptr_t> m_connections;
         std::mutex m_connection_mutex;
