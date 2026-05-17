@@ -48,6 +48,7 @@ namespace host {
         void shutdown() {
             toggle_accepting(false);
 
+            m_work_guard.reset();
             m_io_context.stop();
 
             if (m_io_thread.joinable()) {
@@ -90,7 +91,7 @@ namespace host {
                 return tcp_status_t::unknown_client;
             }
 
-            bool success = it->second->send(
+            const bool success = it->second->send(
                 m_registry.create_payload(data),
                 m_registry.get_packet_bytes<T>() + sizeof(common::esp_id_t)
             );
@@ -98,11 +99,6 @@ namespace host {
             if (!success) return tcp_status_t::no_client_connection;
 
             return tcp_status_t::success;
-        }
-
-        template<typename T, auto Fn>
-        void register_receive_callback() {
-            m_registry.register_callback<T, Fn>();
         }
 
         void receive_from_client(bool enable) {
@@ -143,19 +139,16 @@ namespace host {
 
             m_acceptor.async_accept(
                 new_connection->get_socket(), 
-                std::bind(
-                    &tcp_server_t::create_new_connection, 
-                    this, 
-                    new_connection,
-                    asio::placeholders::error
-                )
+                [this, new_connection](const std::error_code& ec) {
+                    this->create_new_connection(new_connection, ec);
+                }
             );
         }
 
-        void create_new_connection(tcp_connection_ptr_t new_connection, const std::error_code& error) {
+        void create_new_connection(tcp_connection_ptr_t new_connection, const std::error_code& ec) {
             if (!m_acceptor.is_open()) return;
 
-            if (error) {
+            if (ec) {
                 //std::cout << "Accepting incoming client failed: " << error.message() << "\n";
                 wait_for_connection();
                 return; 
@@ -163,7 +156,7 @@ namespace host {
 
             // setup new valid connection
             new_connection->set_connection_id(m_connection_count);
-            new_connection->set_receive_callback([&](common::esp_id_t id, common::payload_t&& buffer, size_t bytes) {
+            new_connection->set_receive_callback([this](common::esp_id_t id, common::payload_t&& buffer, size_t bytes) {
                 handle_client_data(id, std::move(buffer), bytes);
             });
             new_connection->set_registry(&m_registry);
@@ -178,10 +171,10 @@ namespace host {
     private:
         asio::io_context m_io_context;
         ip::tcp::acceptor m_acceptor;
+        ip::tcp::endpoint m_endpoint;
+
         std::thread m_io_thread;
         asio::executor_work_guard<asio::io_context::executor_type> m_work_guard;
-
-        ip::tcp::endpoint m_endpoint;
 
         std::unordered_map<common::esp_id_t, tcp_connection_ptr_t> m_connections;
         std::mutex m_connection_mutex;

@@ -29,8 +29,8 @@ namespace common {
             return max;
         }
 
-        static constexpr size_t c_packet_id_size = sizeof(uint16_t);
-        static constexpr size_t c_max_payload = get_max_bytes() + c_packet_id_size;
+        static constexpr size_t c_payload_is_size = sizeof(uint16_t);
+        static constexpr size_t c_max_payload = get_max_bytes() + c_payload_is_size;
 
     public:
         using packet_id_t = uint16_t;
@@ -43,15 +43,15 @@ namespace common {
             static_assert(has_type<T>(), "T must be in Ts...");
 
             // set up buffer and data 
-            payload_t buffer;
-            typename T::net_t net_data = T::to_net(data);
+            payload_t payload;
+            const typename T::net_t net_data = T::to_net(data);
             constexpr packet_id_t packet_id = get_type_id<T>();
 
-            // copy data into the buffer
-            std::memcpy(buffer.data(), &packet_id, c_packet_id_size); 
-            std::memcpy(buffer.data() + c_packet_id_size, &net_data, sizeof(net_data)); 
+            // copy data into the payload
+            std::memcpy(payload.data(), &packet_id, c_payload_is_size); 
+            std::memcpy(payload.data() + c_payload_is_size, &net_data, sizeof(net_data)); 
 
-            return buffer;
+            return payload;
         }
 
         size_t get_packet_bytes(packet_id_t packed_id) const {
@@ -75,14 +75,14 @@ namespace common {
 
             // call the callback if one has been registered
             auto& callback = m_callback[packet_id];
-            bool has_callback = callback.invoker != nullptr && callback.bytes != 0;
-            bool do_bytes_match = callback.bytes == bytes_received - c_packet_id_size;
+            const bool has_callback = callback.invoker != nullptr && callback.bytes != 0;
+            const bool do_bytes_match = callback.bytes == bytes_received - c_payload_is_size;
 
             if (has_callback) {
                 if (!do_bytes_match) return false;
 
                 callback.invoker(payload_view_t(
-                    payload.data() + c_packet_id_size, // offset id bytes to just give payload
+                    payload.data() + c_payload_is_size, // offset id bytes to just give payload
                     callback.bytes
                 ));
             }
