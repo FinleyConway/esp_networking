@@ -32,8 +32,9 @@ extern "C" void app_main() {
 
     client::tcp_client_t c;
     
-    if (c.connect_to(common::service_config_t::hostname, common::service_config_t::port) == client::tcp_status_t::success) { 
-        c.register_receieve_callback<common::init_esp_t, &on_esp_init>();
+    c.register_receieve_callback<common::init_esp_t, &on_esp_init>();
+
+    if (c.try_connect() == client::tcp_status_t::success) { 
 
         ESP_LOGI("ESP_MAIN", "Connected");
 

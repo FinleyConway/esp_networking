@@ -3,7 +3,6 @@
 #include "networking/tcp_server.hpp"
 #include "logging/logger.hpp"
 #include "types/restart_esp.hpp"
-#include "service_config.hpp"
 
 void on_esp_init(common::init_esp_t init_esp) {
     LOG_INFO("Received from esp: {}", init_esp.id);
@@ -19,8 +18,7 @@ void on_disconnect(common::esp_id_t id) {
 
 int main() {
     host::logger_t::init();
-
-    host::tcp_server_t server(ip::tcp::v4(), common::service_config_t::port);
+    host::tcp_server_t server(ip::tcp::v4());
 
     server.register_receive_callback<common::init_esp_t, &on_esp_init>();
     server.register_on_connect(on_connect);

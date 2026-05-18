@@ -19,7 +19,7 @@ namespace client {
     public:
         int get_socket() const;
 
-        tcp_status_t connect_to(const char* host, const char* port);
+        tcp_status_t try_connect();
 
         tcp_status_t disconnect();
 

@@ -2,17 +2,22 @@
 
 #include <lwip/netdb.h>
 
+#include "service_config.hpp"
+
 namespace client {
     int tcp_client_t::get_socket() const {
         return m_socket;
     }
 
-    tcp_status_t tcp_client_t::connect_to(const char* host, const char* port) {
+    tcp_status_t tcp_client_t::try_connect() {
         const struct addrinfo hints = {
             .ai_family = AF_INET,
             .ai_socktype = SOCK_STREAM
         };
         struct addrinfo* res;
+
+        constexpr const char* host = common::service_config_t::hostname;
+        constexpr const char* port = common::service_config_t::port;
 
         // try to get the address from mdns name
         if (getaddrinfo(host, port, &hints, &res) == 0) {

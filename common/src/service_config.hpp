@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-
 namespace common {
     struct service_config_t {
         static constexpr const char* name = "esp_server";
