@@ -16,51 +16,20 @@ namespace host {
     public:
         using pointer_t = std::shared_ptr<tcp_connection_t>;
 
-        static pointer_t create(asio::io_context& io_context) {
-            return pointer_t(new tcp_connection_t(io_context));
-        }
+        static pointer_t create(asio::io_context& io_context);
 
-        ip::tcp::socket& get_socket() {
-            return m_socket;
-        }
+        ip::tcp::socket& get_socket();
 
-        void set_spec(common::esp_id_t id, common::registry_t& registry, on_disconnect_fn&& callback) {
-            m_id = id;
-            m_io_state.set_spec(registry, [this](common::esp_id_t) {
-                disconnect();
-            });
-            m_disconnect_callback = std::move(callback);
-        }
+        void set_spec(common::esp_id_t id, common::registry_t& registry, on_disconnect_fn&& callback);
 
-        bool send(common::payload_t&& payload, size_t bytes) {
-            return m_io_state.send(std::move(payload), bytes);
-        }
+        bool send(common::payload_t&& payload, size_t bytes);
 
-        void set_receiving_state(bool enable) {
-            if (enable) {
-                m_io_state.start_receiving();
-            }   
-            else {
-                m_io_state.stop_receiving();
-            }
-        }
+        void set_receiving_state(bool enable);
 
-        bool disconnect() {
-            if (!m_socket.is_open()) return false;
-
-            m_io_state.stop_io();
-            m_socket.close();
-
-            if (m_disconnect_callback) {
-                m_disconnect_callback(m_id);
-            }
-
-            return true;
-        }
+        bool disconnect();
 
     private:
-        explicit tcp_connection_t(asio::io_context& io_context) : m_socket(io_context), m_io_state(m_socket) {
-        }
+        explicit tcp_connection_t(asio::io_context& io_context);
 
     private:
         ip::tcp::socket m_socket;
