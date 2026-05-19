@@ -1,6 +1,7 @@
     #pragma once
 
     #include <type_traits>
+    #include <concepts>
     #include <cstdint>
     #include <cstring>
     #include <array>
@@ -53,6 +54,13 @@
             payload = payload.subspan(sizeof(T)); // offset payload
         }
 
+        template<typename T, size_t N>
+        void write(payload_view_t& payload, const std::array<T, N>& arr) {
+            for (auto v : arr) {
+                write(payload, v);
+            }
+        }
+
         template<primitive_type T>
         T read(common::payload_view_t& payload) {
             assert(payload.size() >= sizeof(T));
@@ -66,13 +74,6 @@
             payload = payload.subspan(sizeof(T)); // offset payload
 
             return primitive;
-        }
-
-        template<typename T, size_t N>
-        void write(payload_view_t& payload, const std::array<T, N>& arr) {
-            for (auto v : arr) {
-                write(payload, v);
-            }
         }
 
         template<typename T, size_t N>

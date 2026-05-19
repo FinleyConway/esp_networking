@@ -20,6 +20,14 @@ struct test_t {
     }
 };
 
+struct test_with_array_t {
+    std::array<int32_t, 10> arr;
+
+    bool operator==(const test_with_array_t& other) const {
+        return arr == other.arr;
+    }
+};
+
 TEST_CASE( "Integer serialisation", "[serialisation]" ) {
     std::array<uint8_t, 10> payload;
 
@@ -75,5 +83,25 @@ TEST_CASE( "Integer serialisation", "[serialisation]" ) {
         send_t.pop = common::read<double>(read_payload_sp);
 
         REQUIRE(write_t == send_t);
+    }
+
+    SECTION("Read and writing an array") {
+        test_with_array_t array_write {
+            .arr = {
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+            }
+        };
+
+        std::array<uint8_t, 4*10> alt_payload;
+        std::span<uint8_t> write_payload_sp(alt_payload);
+
+        common::write(write_payload_sp, array_write.arr);
+
+        test_with_array_t array_read;
+        std::span<uint8_t> read_payload_sp(alt_payload);
+
+        array_read.arr = common::read<int32_t, 10>(read_payload_sp);
+
+        REQUIRE(array_write == array_read);
     }
 }
