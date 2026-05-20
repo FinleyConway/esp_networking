@@ -7,6 +7,11 @@
 #include <array>
 #include <bit>
 
+#define EMPTY_MESSAGE(type)                                                     \
+    static void serialise(std::span<uint8_t>& payload, const type& data) {}     \
+    static type deserialise(std::span<uint8_t> payload) { return {}; }          \
+    static constexpr size_t payload_size() { return 0; }                          
+
 namespace common {
     template<typename T>
     concept primitive_type = std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>;
