@@ -10,14 +10,12 @@
 
 #include <asio.hpp>
 
-#include "host/logging/logger.hpp"
 #include "host/networking/mdns_service.hpp"
 #include "host/networking/tcp_callbacks.hpp"
 #include "host/networking/tcp_connection.hpp"
 
 #include "common/api/types.hpp"
 #include "common/api/registry.hpp"
-#include "common/api/service_config.hpp"
 
 namespace host {
     namespace ip = asio::ip;

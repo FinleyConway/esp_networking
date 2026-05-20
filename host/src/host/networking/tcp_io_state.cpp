@@ -1,5 +1,8 @@
 #include "host/networking/tcp_io_state.hpp"
 
+#include "host/logging/logger.hpp"
+#include "host/logging/assert.hpp"
+
 namespace host {
     tcp_io_state_t::tcp_io_state_t(ip::tcp::socket& io_context) : m_socket(io_context) {}
 

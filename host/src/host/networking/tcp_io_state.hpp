@@ -7,8 +7,6 @@
 
 #include <asio.hpp>
 
-#include "host/logging/logger.hpp"
-#include "host/logging/assert.hpp"
 #include "host/networking/tcp_callbacks.hpp"
 
 #include "common/api/registry.hpp"

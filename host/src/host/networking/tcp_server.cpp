@@ -1,5 +1,9 @@
 #include "host/networking/tcp_server.hpp"
 
+#include "host/logging/logger.hpp"
+
+#include "common/api/service_config.hpp"
+
 namespace host {
     tcp_server_t::tcp_server_t() : 
         m_acceptor(m_io_context),
