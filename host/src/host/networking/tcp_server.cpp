@@ -81,6 +81,8 @@ namespace host {
         for (auto& [_, connection] : m_connections) {
             connection->set_receiving_state(enable);
         }
+
+        m_receiving = enable;
     }
 
     tcp_status_t tcp_server_t::disconnect_client(common::esp_id_t client_id) {
@@ -104,7 +106,7 @@ namespace host {
         m_on_connect_callback = std::move(callback);
     }
 
-    void tcp_server_t::register_on_disconnect(on_connect_fn&& callback) {
+    void tcp_server_t::register_on_disconnect(on_disconnect_fn&& callback) {
         m_on_disconnect_callback = std::move(callback);
     }
 
@@ -143,7 +145,7 @@ namespace host {
         if (ec) {
             LOG_ERROR("Accepting incoming client failed: {}", ec.message());
 
-            wait_for_connection(); // TODO: Fix this
+            wait_for_connection();
             return; 
         }
 
@@ -151,6 +153,7 @@ namespace host {
         new_connection->set_spec(m_connection_count, m_registry, [this](common::esp_id_t id) {
             on_disconnect(id);
         });
+        new_connection->set_receiving_state(m_receiving);
         m_connections.emplace(m_connection_count, new_connection);
 
         // call callback

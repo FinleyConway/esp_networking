@@ -1,7 +1,6 @@
 #pragma once
 
 #include <mutex>
-#include <atomic>
 #include <thread>
 #include <utility>
 #include <exception>
@@ -33,6 +32,8 @@ namespace host {
         tcp_server_t();
         ~tcp_server_t();
 
+        asio::io_context& get_io_context();
+
         void start();
 
         bool is_running() const;
@@ -52,7 +53,7 @@ namespace host {
 
             const bool success = it->second->send(
                 m_registry.create(data),
-                m_registry.packet_size<T>() + sizeof(common::esp_id_t)
+                m_registry.packet_size<T>()
             );
 
             if (!success) return tcp_status_t::no_client_connection;
@@ -64,14 +65,15 @@ namespace host {
 
         tcp_status_t disconnect_client(common::esp_id_t client_id);
 
-        template<typename T, auto Fn>
-        void register_receive_callback() {
-            m_registry.register_callback<T, Fn>();
+        template<typename T, typename Fn>
+        void register_receive_callback(Fn&& fn) {
+            callback_holder_t<T>::fn = std::forward<Fn>(fn);
+            m_registry.template register_callback<T, callback_holder_t<T>::trampoline>();
         }
 
         void register_on_connect(on_connect_fn&& callback);
 
-        void register_on_disconnect(on_connect_fn&& callback);
+        void register_on_disconnect(on_disconnect_fn&& callback);
 
     private:
         void on_connect(common::esp_id_t id);
@@ -81,6 +83,18 @@ namespace host {
         void wait_for_connection();
 
         void create_new_connection(tcp_connection_ptr_t new_connection, const std::error_code& ec);
+
+    private:
+        // bit of a hack
+        // lets client have no heap alloc while host does whatever
+        template<typename T>
+        struct callback_holder_t {
+            static inline std::function<void(const T&)> fn;
+
+            static void trampoline(const T& value) {
+                fn(value);
+            }
+        };
 
     private:
         asio::io_context m_io_context;
@@ -94,6 +108,7 @@ namespace host {
 
         std::unordered_map<common::esp_id_t, tcp_connection_ptr_t> m_connections;
         common::esp_id_t m_connection_count = 0;
+        bool m_receiving = true;
 
         on_connect_fn m_on_connect_callback;
         on_disconnect_fn m_on_disconnect_callback;
