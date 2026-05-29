@@ -17,8 +17,8 @@ namespace host {
     };
 }
 
-#define LOG_TRACE(...)    ::host::logger_t::get_logger()->trace(__VA_ARGS__)
-#define LOG_INFO(...)     ::host::logger_t::get_logger()->info(__VA_ARGS__)
-#define LOG_WARN(...)     ::host::logger_t::get_logger()->warn(__VA_ARGS__)
-#define LOG_ERROR(...)    ::host::logger_t::get_logger()->error(__VA_ARGS__)
-#define LOG_CRITICAL(...) ::host::logger_t::get_logger()->critical(__VA_ARGS__)
+#define LOG_TRACE(...)    if (::host::logger_t::get_logger()) ::host::logger_t::get_logger()->trace(__VA_ARGS__)
+#define LOG_INFO(...)     if (::host::logger_t::get_logger()) ::host::logger_t::get_logger()->info(__VA_ARGS__)
+#define LOG_WARN(...)     if (::host::logger_t::get_logger()) ::host::logger_t::get_logger()->warn(__VA_ARGS__)
+#define LOG_ERROR(...)    if (::host::logger_t::get_logger()) ::host::logger_t::get_logger()->error(__VA_ARGS__)
+#define LOG_CRITICAL(...) if (::host::logger_t::get_logger()) ::host::logger_t::get_logger()->critical(__VA_ARGS__)
