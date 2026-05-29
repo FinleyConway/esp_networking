@@ -10,11 +10,7 @@ namespace host {
     }
 
     void tcp_connection_t::set_spec(common::esp_id_t id, common::registry_t& registry, on_disconnect_fn&& callback) {
-        m_id = id;
-        m_io_state.set_spec(registry, [this](common::esp_id_t) {
-            disconnect();
-        });
-        m_disconnect_callback = std::move(callback);
+        m_io_state.set_spec(id, registry, std::move(callback));
     }
 
     bool tcp_connection_t::send(common::payload_t&& payload, size_t bytes) {
@@ -35,10 +31,6 @@ namespace host {
 
         m_io_state.stop_io();
         m_socket.close();
-
-        if (m_disconnect_callback) {
-            m_disconnect_callback(m_id);
-        }
 
         return true;
     }

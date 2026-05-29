@@ -64,7 +64,7 @@ TEST_CASE( "packet_registry class", "[packet_registry]" ) {
     reg_t registry;
 
     SECTION("Get packet size") {
-        size_t bytes_1 = registry.packet_size(0);
+        std::optional<size_t> bytes_1 = registry.expected_payload_size(0);
         size_t bytes_2 = registry.packet_size<test_one_t>();
 
         REQUIRE(bytes_1 == 0);
@@ -72,7 +72,7 @@ TEST_CASE( "packet_registry class", "[packet_registry]" ) {
 
         registry.register_callback<test_one_t, &test_one_callback>();
 
-        size_t reg_bytes_1 = registry.packet_size(0);
+        std::optional<size_t> reg_bytes_1 = registry.expected_payload_size(0);
         size_t reg_bytes_2 = registry.packet_size<test_one_t>();
 
         REQUIRE(reg_bytes_1 == 2);

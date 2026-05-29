@@ -6,7 +6,8 @@
 namespace host {
     tcp_io_state_t::tcp_io_state_t(ip::tcp::socket& io_context) : m_socket(io_context) {}
 
-    void tcp_io_state_t::set_spec(common::registry_t& registry, on_disconnect_fn&& callback) {
+    void tcp_io_state_t::set_spec(common::esp_id_t id, common::registry_t& registry, on_disconnect_fn&& callback) {
+        m_id = id;
         m_registry = &registry;
         m_disconnect_callback = std::move(callback);
     }
@@ -83,28 +84,30 @@ namespace host {
         );
     }
 
-    void tcp_io_state_t::read_payload(const std::error_code& id_ec, size_t) {
+    void tcp_io_state_t::read_payload(const std::error_code& id_ec, size_t id_bytes) {
         if (has_or_handle_io_error(id_ec)) return;
 
         LOG_ASSERT(m_registry != nullptr, "m_registry is nullptr!");
 
-        size_t size = m_registry->packet_size(m_read_state.id);
+        std::optional<size_t> size = m_registry->expected_payload_size(m_read_state.id);
 
-        LOG_ASSERT(size != 0, "Packet size is not registered!");
+        LOG_ASSERT(size.has_value(), "Packet size is not registered!");
 
         asio::async_read(
             m_socket,
-            asio::buffer(m_read_state.payload.data(), size),
-            [this](const std::error_code& ec, size_t bytes_transferred) {
+            asio::buffer(m_read_state.payload.data() + sizeof(common::packet_id_t), size.value()),
+            [this, id_bytes](const std::error_code& ec, size_t bytes_transferred) {
                 if (!has_or_handle_io_error(ec)) {
                     LOG_ASSERT(m_registry != nullptr, "m_registry is nullptr!");
 
                     // notify server
-                    m_registry->dispatch(
+                    bool has_dispatched = m_registry->dispatch(
                         m_read_state.id,
                         std::move(m_read_state.payload), 
-                        bytes_transferred
+                        bytes_transferred + id_bytes
                     );
+
+                    LOG_ASSERT(has_dispatched, "Failed to dispatch incoming message callback!");
 
                     // start the next read cycle
                     m_io_read_state = io_state_t::idle;
@@ -122,7 +125,7 @@ namespace host {
             stop_io();
 
             if (m_disconnect_callback) {
-                m_disconnect_callback(0); // id is pointless here, kind of a code smell?
+                m_disconnect_callback(m_id);
             }
 
             return true;

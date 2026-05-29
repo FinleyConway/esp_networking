@@ -19,7 +19,7 @@ namespace host {
     public:
         tcp_io_state_t(ip::tcp::socket& io_context);
 
-        void set_spec(common::registry_t& registry, on_disconnect_fn&& callback);
+        void set_spec(common::esp_id_t id, common::registry_t& registry, on_disconnect_fn&& callback);
 
         bool send(common::payload_t&& payload, size_t bytes);
 
@@ -57,6 +57,7 @@ namespace host {
         };
 
     private:
+        common::esp_id_t m_id = 0;
         ip::tcp::socket& m_socket;
         common::registry_t* m_registry = nullptr;
 
