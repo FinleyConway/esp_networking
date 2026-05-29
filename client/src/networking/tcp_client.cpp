@@ -4,17 +4,19 @@
 
 #include "common/api/service_config.hpp"
 
+#include <esp_log.h>
+
 namespace client {
     int tcp_client_t::get_socket() const {
         return m_socket;
     }
 
-    tcp_status_t tcp_client_t::try_connect() {
-        const struct addrinfo hints = {
-            .ai_family = AF_INET,
-            .ai_socktype = SOCK_STREAM
-        };
-        struct addrinfo* res;
+    tcp_status_t tcp_client_t::try_connect(int64_t timeout_sec) {
+        addrinfo hints = {};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_IP;
+        addrinfo* res = nullptr;
 
         constexpr const char* host = common::service_config_t::hostname;
         constexpr const char* port = common::service_config_t::port;
@@ -27,25 +29,37 @@ namespace client {
                 return tcp_status_t::socket_failure;
             }
 
+            // allow recv to wake up just incase my wifi explodes
+            timeval timeout {
+                .tv_sec = timeout_sec,
+                .tv_usec = 0
+            };
+            setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
             if (connect(socket_fd, res->ai_addr, res->ai_addrlen) < 0) {
-                disconnect();
+                close(socket_fd);
+                freeaddrinfo(res);
 
                 return tcp_status_t::failed_to_connect;
             }
 
             m_socket = socket_fd;
 
-            freeaddrinfo(res);
-
             return tcp_status_t::success;
         }
 
-        freeaddrinfo(res);
+        if (res != nullptr) {
+            freeaddrinfo(res);
+        }
 
         return tcp_status_t::unknown_mds_address;
     }
 
     tcp_status_t tcp_client_t::disconnect() {
+        if (m_socket < 0) {
+            return tcp_status_t::failure;
+        }
+
         if (close(m_socket) < 0) {
             return tcp_status_t::socket_failure;
         }
@@ -61,18 +75,17 @@ namespace client {
 
     tcp_status_t tcp_client_t::listen_to_server() {
         tcp_status_t status;
-        common::payload_t payload;
+        common::payload_t payload{};
 
         const common::packet_id_t received_id = recv_payload_id(payload, status);
 
         if (status != tcp_status_t::success) return status;
 
-        const size_t expected_payload_bytes = m_registry.packet_size(received_id);
-        const bool has_payload = expected_payload_bytes != 0;
+        const std::optional<size_t> expected_payload_bytes = m_registry.expected_payload_size(received_id);
 
-        if (!has_payload) return tcp_status_t::unknown_packet;
+        if (!expected_payload_bytes.has_value()) return tcp_status_t::unknown_packet;
 
-        const size_t payload_bytes = recv_payload(expected_payload_bytes, payload, status);
+        const size_t payload_bytes = recv_payload(expected_payload_bytes.value(), payload, status);
 
         if (status != tcp_status_t::success) return status;
 
@@ -96,7 +109,13 @@ namespace client {
                 0
             );
 
-            if (result == -1) return tcp_status_t::failure;
+            if (result < 0) {
+                if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                    return tcp_status_t::timeout;
+                }
+
+                return tcp_status_t::failure;
+            } 
             if (result == 0) return tcp_status_t::connection_closed;
 
             bytes_read += result;
@@ -110,6 +129,8 @@ namespace client {
         size_t id_bytes_read = 0;
 
         status = recv_exact(payload.data(), packet_id_size, id_bytes_read);
+
+        if (status != tcp_status_t::success) return 0;
 
         // get the payload size from the received id
         common::packet_id_t received_id = 0;

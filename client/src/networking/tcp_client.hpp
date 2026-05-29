@@ -9,6 +9,7 @@ namespace client {
     enum class tcp_status_t {
         success,
         failure,
+        timeout,
         connection_closed,
         socket_failure,
         failed_to_connect,
@@ -20,7 +21,7 @@ namespace client {
     public:
         int get_socket() const;
 
-        tcp_status_t try_connect();
+        tcp_status_t try_connect(int64_t timeout_sec = 30);
 
         tcp_status_t disconnect();
 
