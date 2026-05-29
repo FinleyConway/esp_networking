@@ -3,25 +3,38 @@ A server-client system for communication between a PC server and multiple ESP32 
 
 ```c++
 // Server
-void on_esp_init(common::init_esp_t init_esp) {
-    LOG_INFO("Received from esp: {}", init_esp.id);
-}
+host::tcp_server_t server;
+host::handshake_manager_t handshake(server, std::chrono::seconds(1)); // 1 sec timeout
 
-host::tcp_server_t server(...);
-server.register_receive_callback<common::init_esp_t, &on_esp_init>();
-server.send_to_client<common::init_esp_t>(...);
+server.register_on_connect([&](common::esp_id_t id) {
+    handshake.on_connect(id);
+});
+
+server.register_on_disconnect([&](common::esp_id_t id) {
+    LOG_INFO("ESP: {} disconnected", id);
+});
+
+server.register_receive_callback<common::esp_init_response_t>([&](const common::esp_init_response_t& res) {
+    handshake.on_response_received(res);
+});
 
 // Client
-void on_esp_init(common::init_esp_t) {
-    static bool state = false;
-    state = !state;
-    gpio_set_level(GPIO_NUM_27, state);
+static void on_init_request(const common::esp_init_request_t& init_request) {
+    ESP_LOGI("TCP_TASK", "Received server response, sending ack...");
+
+    tcp_send_event_t::send(tcp_event_data_t {
+        .type = tcp_event_data_t::type_t::init_respond,
+        .init_respond = {
+            .id = init_request.id
+        }
+    });
+
+    // store id somewhere
 }
 
 client::tcp_client_t client;
-client.register_receieve_callback<common::init_esp_t, &on_esp_init>();
+client.register_receieve_callback<common::esp_init_request_t, &on_init_request>();
 client.listen_to_server();
-client.send_to_server<common::init_esp_t>(...);
 ```
 
 ## Building and Running
