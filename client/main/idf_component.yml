@@ -15,4 +15,3 @@ dependencies:
   #   # All dependencies of `main` are public by default.
   #   public: true
   espressif/cjson: ^1.7.19~2
-  espressif/mdns: ^1.11.1
