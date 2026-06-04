@@ -179,8 +179,6 @@ namespace client {
             auto* self = static_cast<wifi_t*>(arg);
 
             if (event_id == WIFI_EVENT_STA_START) {
-                //if (self->m_is_softap_prov) return;
-
                 if (esp_wifi_connect() != ESP_OK) {
                     ESP_LOGE(c_tag, "Failed to connect!");
                     xEventGroupSetBits(self->m_event_group, c_fail_bit);
@@ -188,8 +186,6 @@ namespace client {
             }
 
             if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
-                //if (self->m_is_softap_prov) return;
-
                 if (self->m_retry_count < self->c_retry_attempts) {
                     ESP_LOGW(c_tag, "Failed to connect, retrying...");
 
@@ -214,7 +210,7 @@ namespace client {
         }
 
     private:
-        static constexpr const char* c_tag = "WIFI";
+        static constexpr const char* c_tag = "wifi";
 
         wifi_mode_t m_mode = wifi_mode_t::none;
 

@@ -47,7 +47,7 @@ namespace client {
             return ESP_OK;
         }
 
-        bool has_credentials() const {
+        bool has_credentials() {
             EventBits_t bits = xEventGroupWaitBits(
                 m_event_group,
                 c_received_bit | c_fail_bit,
@@ -56,7 +56,17 @@ namespace client {
                 portMAX_DELAY
             );
 
-            return (bits & c_received_bit);
+            if (bits & c_received_bit) {
+                return true;
+            }
+
+            reset_credentials_check();
+
+            return false;
+        }
+
+        void reset_credentials_check() {
+            xEventGroupClearBits(m_event_group, c_received_bit | c_fail_bit);
         }
 
         esp_err_t try_stop() {
@@ -203,7 +213,6 @@ namespace client {
         static constexpr const char* c_tag = "http";
 
         httpd_handle_t m_http_handle = nullptr;
-        //httpd_uri_t m_wifi_cred_get_uri;
         httpd_uri_t m_wifi_cred_post_uri;
 
         EventGroupHandle_t m_event_group = nullptr;
