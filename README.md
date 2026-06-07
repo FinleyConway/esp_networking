@@ -75,7 +75,7 @@ It also exposes a GET response to know when the wifi has been connected (this mu
 
 ```
 {
-    "connected": true
+    "status": "connected" | "bad_credentials" | "connecting" | "idle"
 }
 ```
 
