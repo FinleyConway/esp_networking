@@ -67,6 +67,12 @@ It exposes a http endpoint which expects a POST response:
     "password": "super_secret_password"
 }
 ```
+It also exposes a GET response to know when the wifi has been connected (this must be called to let esp acknowledge of this connection):
+```
+{
+    "connected": true
+}
+```
 
 ---
 ### Server:
